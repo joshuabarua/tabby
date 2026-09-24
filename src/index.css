@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces Variable", Georgia, serif;
+  --font-sans: "Instrument Sans Variable", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-paper: #f6f1e7;
+  --color-surface: #fdfaf3;
+  --color-ink: #211b12;
+  --color-ink-soft: #5c5344;
+  --color-faint: #9a8f7c;
+  --color-line: #ddd3c0;
+  --color-accent: #b4532a;
+  --color-accent-deep: #8f3d1e;
+  --color-chord: #2e4b8f;
+  --color-chord-bg: #e6ebf8;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+  background-image: radial-gradient(#e8e0cf 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+::selection {
+  background: #b4532a33;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.lyric-input {
+  font-family: var(--font-mono);
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  caret-color: var(--color-accent);
+}
+.lyric-input:focus {
+  outline: none;
+}
+.lyric-input::placeholder {
+  color: var(--color-faint);
+  opacity: 0.6;
+}
+
+.chord-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-chord);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.chord-name:hover {
+  background: var(--color-chord-bg);
+  border-radius: 3px;
+}
+
+.fade-up {
+  animation: fadeUp 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

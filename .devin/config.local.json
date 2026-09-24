@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(node)",
+      "Exec(npm install)",
+      "Exec(cd)",
+      "Exec(sed)",
+      "Exec(tail)",
+      "Exec(python3)",
+      "Exec(npm i)",
+      "Exec(curl)",
+      "Exec(gh auth)",
+      "Exec(gh api)",
+      "Exec(git init)"
+    ]
+  }
+}
