@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Song } from '../types'
-import { listSongs, putSong, deleteSong, getSong } from '../lib/storage'
+import { listSongs, getSong } from '../lib/storage'
+import { saveSong, removeSong } from '../lib/sync'
+import { AuthButton } from './AuthButton'
 import { newSong, validateSong, exportSongJson } from '../lib/song'
 import { uid } from '../lib/id'
 
@@ -16,7 +18,7 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
 
   const create = async () => {
     const song = newSong()
-    await putSong(song)
+    await saveSong(song)
     onOpen(song)
   }
 
@@ -25,13 +27,13 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
     copy.id = uid()
     copy.title = `${song.title} (copy)`
     copy.createdAt = copy.updatedAt = new Date().toISOString()
-    await putSong(copy)
+    await saveSong(copy)
     refresh()
   }
 
   const remove = async (song: Song) => {
     if (!window.confirm(`Delete “${song.title}”? This can't be undone.`)) return
-    await deleteSong(song.id)
+    await removeSong(song.id)
     refresh()
   }
 
@@ -39,7 +41,7 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
     const title = renameValue.trim()
     if (title) {
       const fresh = (await getSong(song.id)) ?? song
-      await putSong({ ...fresh, title, updatedAt: new Date().toISOString() })
+      await saveSong({ ...fresh, title, updatedAt: new Date().toISOString() })
     }
     setRenaming(null)
     refresh()
@@ -56,7 +58,7 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
       }
       const existing = await getSong(song.id)
       if (existing) song.id = uid()
-      await putSong(song)
+      await saveSong(song)
       refresh()
     } catch {
       setError('Import failed: not a valid JSON file')
@@ -73,7 +75,8 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
 
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[11px] uppercase tracking-[0.25em] text-faint">My songs</h2>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <AuthButton onSynced={refresh} />
             <button
               onClick={() => fileRef.current?.click()}
               className="text-sm px-3 py-1.5 rounded-md border border-line hover:border-ink/40"

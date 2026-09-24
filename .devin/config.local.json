@@ -11,7 +11,9 @@
       "Exec(curl)",
       "Exec(gh auth)",
       "Exec(gh api)",
-      "Exec(git init)"
+      "Exec(git init)",
+      "Exec(sleep)",
+      "Exec(git add)"
     ]
   }
 }

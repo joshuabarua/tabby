@@ -10,7 +10,7 @@ import {
 } from 'react'
 import type { Song } from '../types'
 import { History } from './history'
-import { putSong } from '../lib/storage'
+import { saveSong } from '../lib/sync'
 
 type SongContextValue = {
   song: Song
@@ -86,7 +86,7 @@ export function SongProvider({ initial, children }: { initial: Song; children: R
     if (saved) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      void putSong(song).then(() => setSaved(true))
+      void saveSong(song).then(() => setSaved(true))
     }, 600)
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)

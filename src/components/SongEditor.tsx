@@ -4,13 +4,14 @@ import { useSong } from '../state/SongContext'
 import { getTuning, BUILTIN_TUNINGS } from '../lib/tunings'
 import { chordDisplayName, transposeChord, transposeNote } from '../lib/music'
 import { newLine, newSection, placedChord } from '../lib/song'
-import { putSong } from '../lib/storage'
+import { saveSong } from '../lib/sync'
 import { LyricLineEditor } from './LyricLineEditor'
 import { ChordPicker } from './ChordPicker'
 import { ChordPopover } from './ChordPopover'
 import { SongPreview } from './SongPreview'
 import { PdfExportDialog } from './pdf/PdfExportDialog'
 import { SectionHeader } from './SectionHeader'
+import { AuthButton } from './AuthButton'
 
 const SECTION_TYPES: { value: SectionType; label: string }[] = [
   { value: 'intro', label: 'Intro' },
@@ -257,7 +258,7 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
       }
       if (e.key === 's') {
         e.preventDefault()
-        void putSong(song)
+        void saveSong(song)
       } else if (e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
@@ -297,6 +298,7 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           {saved ? 'saved' : 'saving…'}
         </span>
         <div className="flex-1" />
+        <AuthButton />
         <button
           onClick={undo}
           disabled={!canUndo}
@@ -314,7 +316,7 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           ↻
         </button>
         <button
-          onClick={() => void putSong(song)}
+          onClick={() => void saveSong(song)}
           className="px-3 py-1.5 text-sm rounded-md border border-line hover:border-ink/40"
           title="Save (⌘S)"
         >
