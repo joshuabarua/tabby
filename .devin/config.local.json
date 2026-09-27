@@ -13,7 +13,11 @@
       "Exec(gh api)",
       "Exec(git init)",
       "Exec(sleep)",
-      "Exec(git add)"
+      "Exec(git add)",
+      "Exec(git commit)",
+      "Exec(firebase)",
+      "Exec(cat)",
+      "Exec(npx tsc)"
     ]
   }
 }

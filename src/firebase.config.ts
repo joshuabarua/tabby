@@ -1,12 +1,10 @@
-// Paste your Firebase web app config here (from Firebase console →
-// Project settings → Your apps → Web app). These values are not secret —
-// Firestore security rules protect the data.
-// You can also override with VITE_FIREBASE_* env vars.
+// Firebase web app config (public by design — Firestore rules protect data).
+// Override with VITE_FIREBASE_* env vars if needed.
 export const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyBOkxaG6sP7lsyljlvET2TwhRQIXsplLuQ',
+  authDomain: 'tabby-8be05.firebaseapp.com',
+  projectId: 'tabby-8be05',
+  storageBucket: 'tabby-8be05.firebasestorage.app',
+  messagingSenderId: '275422516860',
+  appId: '1:275422516860:web:7fa69c8446ad5828529bf9',
 }
