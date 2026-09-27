@@ -18,7 +18,10 @@
       "Exec(firebase)",
       "Exec(cat)",
       "Exec(npx tsc)",
-      "Exec(gh run)"
+      "Exec(gh run)",
+      "Exec(pgrep)",
+      "Exec(lsof)",
+      "Exec(npx vite)"
     ]
   }
 }

@@ -12,6 +12,7 @@ import { SongPreview } from './SongPreview'
 import { PdfExportDialog } from './pdf/PdfExportDialog'
 import { SectionHeader } from './SectionHeader'
 import { AuthButton } from './AuthButton'
+import { suggestSections } from '../lib/structure'
 
 const SECTION_TYPES: { value: SectionType; label: string }[] = [
   { value: 'intro', label: 'Intro' },
@@ -165,9 +166,9 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
       pendingFocus.current = { id: l.id, col: 0 }
     })
 
-  const addSection = () =>
+  const addSection = (type: SectionType = 'verse', title?: string) =>
     update(d => {
-      d.sections.push(newSection('verse', `Verse ${d.sections.filter(s => s.type === 'verse').length + 1}`))
+      d.sections.push(newSection(type, title))
     })
 
   const moveSection = (secIdx: number, dir: -1 | 1) =>
@@ -499,12 +500,24 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
               </div>
             </section>
           ))}
-          <button
-            onClick={addSection}
-            className="w-full py-3 border border-dashed border-line rounded-lg text-sm text-ink-soft hover:border-accent hover:text-accent transition-colors"
-          >
-            + Add section
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] uppercase tracking-widest text-faint">Add section</span>
+            {suggestSections(song.sections).map(s => (
+              <button
+                key={s.title}
+                onClick={() => addSection(s.type, s.title)}
+                className="px-3 py-2 border border-dashed border-line rounded-lg text-sm text-ink-soft hover:border-accent hover:text-accent transition-colors"
+              >
+                + {s.title}
+              </button>
+            ))}
+            <button
+              onClick={() => addSection('custom', 'Section')}
+              className="px-3 py-2 text-sm text-faint hover:text-ink"
+            >
+              + other…
+            </button>
+          </div>
           <p className="text-[11px] text-faint pb-24 sm:pb-8">
             Click the space above a line to place a chord. Pick one from the palette below to place
             several quickly — Esc to stop. ⌘K opens the picker, ⌘Z undoes.
