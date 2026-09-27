@@ -16,8 +16,8 @@ export function AuthButton({ onSynced }: { onSynced?: () => void }) {
     setBusy(true)
     try {
       await signInWithGoogle()
-      const { pulled, pushed } = await syncAll()
-      setSyncMsg(`synced ↓${pulled} ↑${pushed}`)
+      const { pulled, pushed, removed } = await syncAll()
+      setSyncMsg(`synced ↓${pulled} ↑${pushed}${removed ? ` ×${removed}` : ''}`)
       setTimeout(() => setSyncMsg(null), 4000)
       onSynced?.()
     } catch (e) {

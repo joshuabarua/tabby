@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   type Firestore,
@@ -10,8 +11,19 @@ import type { Song } from '../types'
 import { currentUser, firebaseEnabled, getDb } from './firebase'
 import { deleteSong, listSongs, putSong } from './storage'
 
-function songsRef(db: Firestore, uid: string) {
-  return collection(db, 'users', uid, 'songs')
+function songsRef(db: Firestore) {
+  return collection(db, 'songs')
+}
+
+function deletionsRef(db: Firestore) {
+  return doc(db, 'meta', 'deletions')
+}
+
+type Deletions = Record<string, string> // songId -> ISO timestamp
+
+async function getDeletions(db: Firestore): Promise<Deletions> {
+  const snap = await getDoc(deletionsRef(db))
+  return snap.exists() ? ((snap.data().songs ?? {}) as Deletions) : {}
 }
 
 export async function saveSong(song: Song): Promise<void> {
@@ -19,7 +31,9 @@ export async function saveSong(song: Song): Promise<void> {
   const user = currentUser()
   if (!user) return
   try {
-    await setDoc(doc(songsRef(getDb(), user.uid), song.id), song)
+    const db = getDb()
+    await setDoc(doc(songsRef(db), song.id), song)
+    await setDoc(deletionsRef(db), { songs: { [song.id]: null } }, { merge: true })
   } catch (e) {
     console.warn('cloud save failed', e)
   }
@@ -30,37 +44,64 @@ export async function removeSong(id: string): Promise<void> {
   const user = currentUser()
   if (!user) return
   try {
-    await deleteDoc(doc(songsRef(getDb(), user.uid), id))
+    const db = getDb()
+    await deleteDoc(doc(songsRef(db), id))
+    await setDoc(
+      deletionsRef(db),
+      { songs: { [id]: new Date().toISOString() } },
+      { merge: true },
+    )
   } catch (e) {
     console.warn('cloud delete failed', e)
   }
 }
 
-export async function syncAll(): Promise<{ pulled: number; pushed: number }> {
+export async function syncAll(): Promise<{ pulled: number; pushed: number; removed: number }> {
   const user = currentUser()
-  if (!firebaseEnabled || !user) return { pulled: 0, pushed: 0 }
+  const none = { pulled: 0, pushed: 0, removed: 0 }
+  if (!firebaseEnabled || !user) return none
 
-  const snap = await getDocs(songsRef(getDb(), user.uid))
+  const db = getDb()
+  const snap = await getDocs(songsRef(db))
   const remote = new Map<string, Song>()
   snap.forEach(d => remote.set(d.id, d.data() as Song))
+  const deletions = await getDeletions(db)
 
   const local = await listSongs()
   let pulled = 0
   let pushed = 0
+  let removed = 0
 
   for (const [id, rsong] of remote) {
     const lsong = local.find(s => s.id === id)
-    if (!lsong || rsong.updatedAt > lsong.updatedAt) {
+    const deletedAt = deletions[id]
+    if (deletedAt && deletedAt >= rsong.updatedAt) {
+      await deleteDoc(doc(songsRef(db), id))
+      if (lsong) await deleteSong(id)
+      removed++
+      continue
+    }
+    if (!lsong) {
+      await putSong(rsong)
+      pulled++
+    } else if (rsong.updatedAt > lsong.updatedAt) {
       await putSong(rsong)
       pulled++
     }
   }
+
   for (const lsong of local) {
     const rsong = remote.get(lsong.id)
+    const deletedAt = deletions[lsong.id]
+    if (deletedAt && deletedAt >= lsong.updatedAt && !rsong) {
+      await deleteSong(lsong.id)
+      removed++
+      continue
+    }
     if (!rsong || lsong.updatedAt > rsong.updatedAt) {
-      await setDoc(doc(songsRef(getDb(), user.uid), lsong.id), lsong)
+      await setDoc(doc(songsRef(db), lsong.id), lsong)
       pushed++
     }
   }
-  return { pulled, pushed }
+  return { pulled, pushed, removed }
 }

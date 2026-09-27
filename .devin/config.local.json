@@ -17,7 +17,8 @@
       "Exec(git commit)",
       "Exec(firebase)",
       "Exec(cat)",
-      "Exec(npx tsc)"
+      "Exec(npx tsc)",
+      "Exec(gh run)"
     ]
   }
 }
