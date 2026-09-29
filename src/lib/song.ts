@@ -121,6 +121,24 @@ export function exportSongJson(song: Song): void {
   URL.revokeObjectURL(url)
 }
 
+export function cloneSection(section: Section, title?: string): Section {
+  return {
+    id: uid(),
+    type: section.type,
+    title: title ?? section.title,
+    lines: section.lines.map(l => ({
+      id: uid(),
+      text: l.text,
+      chords: l.chords.map(c => ({
+        id: uid(),
+        chord: { ...c.chord },
+        position: c.position,
+        voicingId: c.voicingId,
+      })),
+    })),
+  }
+}
+
 export function placedChord(chord: PlacedChord['chord'], position: number): PlacedChord {
   return { id: uid(), chord, position }
 }

@@ -3,7 +3,8 @@ import type { Chord, Section, SectionType } from '../types'
 import { useSong } from '../state/SongContext'
 import { getTuning, BUILTIN_TUNINGS } from '../lib/tunings'
 import { chordDisplayName, transposeChord, transposeNote } from '../lib/music'
-import { newLine, newSection, placedChord } from '../lib/song'
+import { newLine, newSection, placedChord, cloneSection } from '../lib/song'
+import { detectKey } from '../lib/keydetect'
 import { saveSong } from '../lib/sync'
 import { LyricLineEditor } from './LyricLineEditor'
 import { ChordPicker } from './ChordPicker'
@@ -47,6 +48,7 @@ type PopState = { secIdx: number; lineIdx: number; placedId: string; x: number; 
 export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
   const { song, update, undo, redo, canUndo, canRedo, saved } = useSong()
   const tuning = getTuning(song.tuningId, song.customTunings)
+  const detectedKey = useMemo(() => detectKey(song), [song])
 
   const [armed, setArmed] = useState<Chord | null>(null)
   const [picker, setPicker] = useState<PickerState | null>(null)
@@ -169,6 +171,12 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
   const addSection = (type: SectionType = 'verse', title?: string) =>
     update(d => {
       d.sections.push(newSection(type, title))
+    })
+
+  const copySection = (sourceId: string, title?: string) =>
+    update(d => {
+      const src = d.sections.find(s => s.id === sourceId)
+      if (src) d.sections.push(cloneSection(src, title))
     })
 
   const moveSection = (secIdx: number, dir: -1 | 1) =>
@@ -359,12 +367,23 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           </label>
           <label className="flex flex-col gap-0.5">
             <span className="text-[10px] uppercase tracking-widest text-faint">Key</span>
-            <input
-              value={song.key ?? ''}
-              onChange={e => update(d => void (d.key = e.target.value), 'meta:key')}
-              placeholder="—"
-              className="bg-transparent border-b border-transparent hover:border-line focus:border-accent w-14 text-sm font-mono"
-            />
+            <div className="flex items-center gap-1.5">
+              <input
+                value={song.key ?? ''}
+                onChange={e => update(d => void (d.key = e.target.value), 'meta:key')}
+                placeholder="—"
+                className="bg-transparent border-b border-transparent hover:border-line focus:border-accent w-14 text-sm font-mono"
+              />
+              {!song.key && detectedKey && (
+                <button
+                  onClick={() => update(d => void (d.key = detectedKey))}
+                  className="text-[11px] font-mono text-chord hover:underline"
+                  title="Detected from chords — click to use"
+                >
+                  {detectedKey}?
+                </button>
+              )}
+            </div>
           </label>
           <label className="flex flex-col gap-0.5">
             <span className="text-[10px] uppercase tracking-widest text-faint">BPM</span>
@@ -502,15 +521,28 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           ))}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] uppercase tracking-widest text-faint">Add section</span>
-            {suggestSections(song.sections).map(s => (
-              <button
-                key={s.title}
-                onClick={() => addSection(s.type, s.title)}
-                className="px-3 py-2 border border-dashed border-line rounded-lg text-sm text-ink-soft hover:border-accent hover:text-accent transition-colors"
-              >
-                + {s.title}
-              </button>
-            ))}
+            {suggestSections(song.sections).map(s => {
+              const source = [...song.sections].reverse().find(x => x.type === s.type)
+              return (
+                <span key={s.title} className="flex gap-1.5">
+                  <button
+                    onClick={() => addSection(s.type, s.title)}
+                    className="px-3 py-2 border border-dashed border-line rounded-lg text-sm text-ink-soft hover:border-accent hover:text-accent transition-colors"
+                  >
+                    + {s.title}
+                  </button>
+                  {source && (
+                    <button
+                      onClick={() => copySection(source.id, s.title)}
+                      className="px-3 py-2 border border-dashed border-chord/50 rounded-lg text-sm text-chord hover:border-chord transition-colors"
+                      title={`Copy chords and lines from ${source.title ?? s.title}`}
+                    >
+                      ⧉ {s.title} (like {source.title ?? s.title})
+                    </button>
+                  )}
+                </span>
+              )
+            })}
             <button
               onClick={() => addSection('custom', 'Section')}
               className="px-3 py-2 text-sm text-faint hover:text-ink"
