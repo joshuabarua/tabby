@@ -607,10 +607,7 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           tuning={tuning}
           capo={song.capo}
           anchor={{ x: pop.x, y: pop.y }}
-          onSelectVoicing={id => {
-            setVoicing(pop.secIdx, pop.lineIdx, pop.placedId, id)
-            setPop(null)
-          }}
+          onSelectVoicing={id => setVoicing(pop.secIdx, pop.lineIdx, pop.placedId, id)}
           onEditChord={chord => {
             setPop(null)
             setPicker({ ...pop, pos: 0, replaceId: pop.placedId, initial: chord })

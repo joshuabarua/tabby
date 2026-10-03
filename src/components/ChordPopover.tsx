@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Chord, PlacedChord, Tuning } from '../types'
 import { chordDescription, chordDisplayName, chordTones, soundingChord } from '../lib/music'
 import { voicingsFor } from '../lib/voicings'
@@ -24,14 +24,7 @@ export function ChordPopover({
   onClose: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [voicingIdx, setVoicingIdx] = useState(0)
   const voicings = voicingsFor(placed.chord, tuning)
-  const current = voicings.find(v => v.id === placed.voicingId) ?? voicings[voicingIdx] ?? voicings[0]
-
-  useEffect(() => {
-    const i = voicings.findIndex(v => v.id === placed.voicingId)
-    if (i >= 0) setVoicingIdx(i)
-  }, [placed.voicingId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -90,40 +83,42 @@ export function ChordPopover({
           </p>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-[11px] uppercase tracking-widest text-faint">
-                Voicing {voicingIdx + 1} of {voicings.length}
-              </p>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setVoicingIdx(i => (i - 1 + voicings.length) % voicings.length)}
-                  className="w-7 h-7 rounded border border-line text-ink-soft hover:border-chord/50"
-                  aria-label="Previous voicing"
-                >
-                  ‹
-                </button>
-                <button
-                  onClick={() => setVoicingIdx(i => (i + 1) % voicings.length)}
-                  className="w-7 h-7 rounded border border-line text-ink-soft hover:border-chord/50"
-                  aria-label="Next voicing"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-            <div className="flex justify-center py-1">
-              {current && <ChordDiagram voicing={current} tuning={tuning} width={120} />}
-            </div>
-            <p className="text-center text-xs text-ink-soft mb-2">
-              {current?.name ?? 'Voicing'}
-              {current?.generated ? ' · generated' : ''}
+            <p className="text-[11px] uppercase tracking-widest text-faint mb-2">
+              Voicings — click to swap
             </p>
-            <button
-              onClick={() => current && onSelectVoicing(current.id)}
-              className="w-full py-1.5 rounded-md border border-chord text-chord text-sm font-medium hover:bg-chord hover:text-white transition-colors"
-            >
-              {current?.id === placed.voicingId ? 'Selected' : 'Choose this voicing'}
-            </button>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {voicings.map(v => {
+                const selected = (placed.voicingId ?? voicings[0].id) === v.id
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => onSelectVoicing(v.id)}
+                    className={`shrink-0 rounded-lg border p-1.5 transition-colors ${
+                      selected
+                        ? 'border-chord bg-chord-bg'
+                        : 'border-line hover:border-chord/60'
+                    }`}
+                    aria-label={`Voicing ${v.name ?? ''}`}
+                    aria-pressed={selected}
+                  >
+                    <ChordDiagram voicing={v} tuning={tuning} width={66} />
+                    <p className="text-[10px] text-center text-ink-soft mt-0.5 leading-tight max-w-16 truncate">
+                      {v.name ?? 'Voicing'}
+                    </p>
+                    <div className="flex justify-center gap-1 mt-0.5">
+                      {v.barres && v.barres.length > 0 && (
+                        <span className="text-[9px] uppercase tracking-wide bg-ink text-paper rounded px-1 leading-3.5">
+                          barre
+                        </span>
+                      )}
+                      {v.generated && (
+                        <span className="text-[9px] text-faint leading-3.5">auto</span>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           </>
         )}
       </div>

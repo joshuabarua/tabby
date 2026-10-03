@@ -287,7 +287,13 @@ function buildVoicing(
 
   return {
     id: `gen:${tuningId}:${frets.join('')}`,
-    name: name ?? (baseFret <= 1 ? 'Open' : `Position ${baseFret}`),
+    name:
+      name ??
+      (barres.length
+        ? `Barre ${baseFret}fr`
+        : baseFret <= 1
+          ? 'Open'
+          : `Position ${baseFret}`),
     frets,
     fingers: fing,
     baseFret,
