@@ -49,8 +49,11 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
   const { song, update, undo, redo, canUndo, canRedo, saved } = useSong()
   const tuning = getTuning(song.tuningId, song.customTunings)
   const detectedKey = useMemo(() => detectKey(song), [song])
-  const firstVerse = song.sections.find(s => s.type === 'verse')
-  const canCopyVerseChords = firstVerse?.lines.some(l => l.chords.length > 0) ?? false
+  const firstByType = useMemo(() => {
+    const map = new Map<SectionType, Section>()
+    for (const s of song.sections) if (!map.has(s.type)) map.set(s.type, s)
+    return map
+  }, [song.sections])
 
   const [armed, setArmed] = useState<Chord | null>(null)
   const [picker, setPicker] = useState<PickerState | null>(null)
@@ -175,22 +178,25 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
       d.sections.push(newSection(type, title))
     })
 
-  const copySection = (sourceId: string, title?: string, afterSource = false) =>
+  const copySection = (sourceId: string) =>
     update(d => {
       const index = d.sections.findIndex(s => s.id === sourceId)
       if (index < 0) return
       const source = d.sections[index]
-      const next = title ?? nextSectionTitle(source.type, d.sections, source.title)
-      d.sections.splice(afterSource ? index + 1 : d.sections.length, 0, cloneSection(source, next))
+      const next = nextSectionTitle(source.type, d.sections, source.title)
+      d.sections.splice(index + 1, 0, cloneSection(source, next))
     })
 
-  const copyVerseChords = (targetId: string) => {
-    if (!canCopyVerseChords) return
+  const copyChordsFromFirst = (targetId: string) => {
+    const target = song.sections.find(s => s.id === targetId)
+    const source = target ? firstByType.get(target.type) : undefined
+    if (!target || !source || source.id === target.id) return
+    if (!source.lines.some(l => l.chords.length > 0)) return
     update(d => {
-      const source = d.sections.find(s => s.type === 'verse')
-      const target = d.sections.find(s => s.id === targetId)
-      if (source && target?.type === 'verse' && source.id !== target.id) {
-        copySectionChords(source, target)
+      const draftTarget = d.sections.find(s => s.id === targetId)
+      const draftSource = draftTarget && d.sections.find(s => s.type === draftTarget.type)
+      if (draftSource && draftTarget && draftSource.id !== draftTarget.id) {
+        copySectionChords(draftSource, draftTarget)
       }
     })
   }
@@ -507,11 +513,16 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
                 onMeta={patch => setSectionMeta(secIdx, patch)}
                 onMove={dir => moveSection(secIdx, dir)}
                 onDelete={() => deleteSection(secIdx)}
-                onCopy={() => copySection(section.id, undefined, true)}
-                onCopyChords={section.type === 'verse' && section.id !== firstVerse?.id
-                  ? () => copyVerseChords(section.id)
+                onCopy={() => copySection(section.id)}
+                onCopyChords={(section.type === 'verse' || section.type === 'chorus') &&
+                section.id !== firstByType.get(section.type)?.id
+                  ? () => copyChordsFromFirst(section.id)
                   : undefined}
-                canCopyChords={canCopyVerseChords}
+                canCopyChords={
+                  firstByType.get(section.type)?.lines.some(l => l.chords.length > 0) ?? false
+                }
+                copyChordsLabel={`Copy chords from first ${section.type === 'verse' ? 'verse' : 'chorus'}`}
+                copyChordsDisabledReason={`Add chords to the first ${section.type === 'verse' ? 'verse' : 'chorus'} before copying them`}
               />
               <div className="pl-1 sm:pl-4">
                 {section.lines.map((line, lineIdx) => (
@@ -542,28 +553,15 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           ))}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] uppercase tracking-widest text-faint">Add section</span>
-            {suggestSections(song.sections).map(s => {
-              const source = [...song.sections].reverse().find(x => x.type === s.type)
-              return (
-                <span key={s.title} className="flex gap-1.5">
-                  <button
-                    onClick={() => addSection(s.type, s.title)}
-                    className="px-3 py-2 border border-dashed border-line rounded-lg text-sm text-ink-soft hover:border-accent hover:text-accent transition-colors"
-                  >
-                    + {s.title}
-                  </button>
-                  {source && (
-                    <button
-                      onClick={() => copySection(source.id, s.title)}
-                      className="px-3 py-2 border border-dashed border-chord/50 rounded-lg text-sm text-chord hover:border-chord transition-colors"
-                      title={`Copy chords and lines from ${source.title ?? s.title}`}
-                    >
-                      ⧉ {s.title} (like {source.title ?? s.title})
-                    </button>
-                  )}
-                </span>
-              )
-            })}
+            {suggestSections(song.sections).map(s => (
+              <button
+                key={s.title}
+                onClick={() => addSection(s.type, s.title)}
+                className="px-3 py-2 border border-dashed border-line rounded-lg text-sm text-ink-soft hover:border-accent hover:text-accent transition-colors"
+              >
+                + {s.title}
+              </button>
+            ))}
             <button
               onClick={() => addSection('custom', 'Section')}
               className="px-3 py-2 text-sm text-faint hover:text-ink"

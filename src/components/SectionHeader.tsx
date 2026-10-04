@@ -11,6 +11,8 @@ export function SectionHeader({
   onCopy,
   onCopyChords,
   canCopyChords,
+  copyChordsLabel,
+  copyChordsDisabledReason,
 }: {
   section: Section
   index: number
@@ -22,6 +24,8 @@ export function SectionHeader({
   onCopy: () => void
   onCopyChords?: () => void
   canCopyChords: boolean
+  copyChordsLabel?: string
+  copyChordsDisabledReason?: string
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 mb-1 group">
@@ -51,7 +55,7 @@ export function SectionHeader({
           className="px-2 py-1 text-[11px] rounded border border-line text-ink-soft hover:border-accent hover:text-accent transition-colors"
           title="Duplicate this section's lyrics and chords"
         >
-          Copy section
+          Duplicate section
         </button>
         {onCopyChords && (
           <button
@@ -60,9 +64,9 @@ export function SectionHeader({
             className="px-2 py-1 text-[11px] rounded border border-chord/40 text-chord enabled:hover:border-chord disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             title={canCopyChords
               ? 'Copy chords onto the same word number of matching lines; keeps lyrics and extra lines. Chords on words the line does not have are skipped.'
-              : 'Add chords to the first verse before copying them'}
+              : copyChordsDisabledReason ?? 'Add chords to the first section before copying them'}
           >
-            Copy chords from first verse
+            {copyChordsLabel ?? 'Copy chords'}
           </button>
         )}
       </div>
