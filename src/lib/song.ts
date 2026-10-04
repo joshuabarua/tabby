@@ -129,14 +129,22 @@ export function cloneSection(section: Section, title?: string): Section {
     lines: section.lines.map(l => ({
       id: uid(),
       text: l.text,
-      chords: l.chords.map(c => ({
-        id: uid(),
-        chord: { ...c.chord },
-        position: c.position,
-        voicingId: c.voicingId,
-      })),
+      chords: cloneChords(l.chords),
     })),
   }
+}
+
+function cloneChords(chords: PlacedChord[]): PlacedChord[] {
+  return chords.map(c => ({ ...c, id: uid(), chord: { ...c.chord } }))
+}
+
+export function copySectionChords(source: Section, target: Section): void {
+  target.lines.forEach((line, index) => {
+    const sourceLine = source.lines[index]
+    if (sourceLine) {
+      line.chords = cloneChords(sourceLine.chords.filter(c => c.position <= line.text.length))
+    }
+  })
 }
 
 export function placedChord(chord: PlacedChord['chord'], position: number): PlacedChord {

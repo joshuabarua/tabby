@@ -8,6 +8,9 @@ export function SectionHeader({
   onMeta,
   onMove,
   onDelete,
+  onCopy,
+  onCopyChords,
+  canCopyChords,
 }: {
   section: Section
   index: number
@@ -16,9 +19,12 @@ export function SectionHeader({
   onMeta: (patch: Partial<Pick<Section, 'type' | 'title'>>) => void
   onMove: (dir: -1 | 1) => void
   onDelete: () => void
+  onCopy: () => void
+  onCopyChords?: () => void
+  canCopyChords: boolean
 }) {
   return (
-    <div className="flex items-center gap-2 mb-1 group">
+    <div className="flex flex-wrap items-center gap-2 mb-1 group">
       <select
         value={section.type}
         onChange={e => onMeta({ type: e.target.value as SectionType })}
@@ -39,7 +45,28 @@ export function SectionHeader({
         aria-label="Section title"
       />
       <div className="flex-1 border-t border-dashed border-line" />
-      <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex gap-0.5">
+      <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+        <button
+          onClick={onCopy}
+          className="px-2 py-1 text-[11px] rounded border border-line text-ink-soft hover:border-accent hover:text-accent transition-colors"
+          title="Duplicate this section's lyrics and chords"
+        >
+          Copy section
+        </button>
+        {onCopyChords && (
+          <button
+            onClick={onCopyChords}
+            disabled={!canCopyChords}
+            className="px-2 py-1 text-[11px] rounded border border-chord/40 text-chord enabled:hover:border-chord disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title={canCopyChords
+              ? 'Replace chords on matching lines; keep lyrics and extra lines. Chords beyond the end of a lyric line are skipped.'
+              : 'Add chords to the first verse before copying them'}
+          >
+            Copy chords from first verse
+          </button>
+        )}
+      </div>
+      <div className="sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex gap-0.5">
         <button
           onClick={() => onMove(-1)}
           disabled={index === 0}

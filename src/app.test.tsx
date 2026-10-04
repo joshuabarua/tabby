@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
-import { describe, it, expect } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, it, expect } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import App from './App'
 import { SongProvider } from './state/SongContext'
 import { SongEditor } from './components/SongEditor'
-import { newSong, validateSong } from './lib/song'
+import { newLine, newSection, newSong, placedChord, validateSong } from './lib/song'
+
+afterEach(cleanup)
 
 describe('app smoke', () => {
   it('library renders empty state', async () => {
@@ -25,6 +27,67 @@ describe('app smoke', () => {
     expect(screen.getByText('Transpose')).toBeTruthy()
     expect(screen.getByText('Export PDF')).toBeTruthy()
     expect(screen.getByText('Preview')).toBeTruthy()
+  })
+
+  it('copies a section directly after its source and supports undo', () => {
+    const song = newSong()
+    song.sections[0].lines = [{ ...newLine('Original lyrics'), chords: [placedChord({ root: 'G', quality: 'maj' }, 0)] }]
+    song.sections.push(newSection('chorus', 'Chorus'))
+    const { container } = render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    fireEvent.click(within(container.querySelector('section')!).getByRole('button', { name: 'Copy section' }))
+    const sections = container.querySelectorAll('section')
+    expect(sections).toHaveLength(3)
+    expect(within(sections[1]).getByDisplayValue('Original lyrics')).toBeTruthy()
+    expect(within(sections[1]).getByRole('button', { name: 'Chord G' })).toBeTruthy()
+    expect((within(sections[2]).getByRole('textbox', { name: 'Section title' }) as HTMLInputElement).value).toBe('Chorus')
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    expect(container.querySelectorAll('section')).toHaveLength(2)
+  })
+
+  it('copies chords from the first verse, preserves lyrics and supports undo/redo', () => {
+    const song = newSong()
+    song.sections[0].lines = [{ ...newLine('First verse lyric'), chords: [placedChord({ root: 'G', quality: 'maj' }, 0)] }]
+    const second = newSection('verse', 'Verse 2')
+    second.lines = [{ ...newLine('Second verse lyric'), chords: [placedChord({ root: 'C', quality: 'maj' }, 0)] }]
+    const third = newSection('verse', 'Verse 3')
+    third.lines = [newLine('Third verse lyric')]
+    song.sections.push(second, newSection('chorus', 'Chorus'), third)
+    const { container } = render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    const sections = container.querySelectorAll('section')
+    const name = 'Copy chords from first verse'
+    expect(within(sections[0]).queryByRole('button', { name })).toBeNull()
+    expect(within(sections[2]).queryByRole('button', { name })).toBeNull()
+    fireEvent.click(within(sections[3]).getByRole('button', { name }))
+    expect(within(sections[3]).getByRole('button', { name: 'Chord G' })).toBeTruthy()
+    fireEvent.click(within(sections[1]).getByRole('button', { name }))
+    expect(within(sections[1]).getByDisplayValue('Second verse lyric')).toBeTruthy()
+    expect(within(sections[1]).getByRole('button', { name: 'Chord G' })).toBeTruthy()
+    expect(within(sections[1]).queryByRole('button', { name: 'Chord C' })).toBeNull()
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    expect(within(sections[1]).getByRole('button', { name: 'Chord C' })).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true })
+    expect(within(sections[1]).getByRole('button', { name: 'Chord G' })).toBeTruthy()
+  })
+
+  it('disables copying verse chords when the first verse has no chords', () => {
+    const song = newSong()
+    const second = newSection('verse', 'Verse 2')
+    second.lines[0].chords = [placedChord({ root: 'C', quality: 'maj' }, 0)]
+    song.sections.push(second)
+    render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    expect((screen.getByRole('button', { name: 'Copy chords from first verse' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('validates song schema', () => {

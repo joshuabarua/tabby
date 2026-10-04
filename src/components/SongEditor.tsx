@@ -3,7 +3,7 @@ import type { Chord, Section, SectionType } from '../types'
 import { useSong } from '../state/SongContext'
 import { getTuning, BUILTIN_TUNINGS } from '../lib/tunings'
 import { chordDisplayName, transposeChord, transposeNote } from '../lib/music'
-import { newLine, newSection, placedChord, cloneSection } from '../lib/song'
+import { newLine, newSection, placedChord, cloneSection, copySectionChords } from '../lib/song'
 import { detectKey } from '../lib/keydetect'
 import { saveSong } from '../lib/sync'
 import { LyricLineEditor } from './LyricLineEditor'
@@ -49,6 +49,8 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
   const { song, update, undo, redo, canUndo, canRedo, saved } = useSong()
   const tuning = getTuning(song.tuningId, song.customTunings)
   const detectedKey = useMemo(() => detectKey(song), [song])
+  const firstVerse = song.sections.find(s => s.type === 'verse')
+  const canCopyVerseChords = firstVerse?.lines.some(l => l.chords.length > 0) ?? false
 
   const [armed, setArmed] = useState<Chord | null>(null)
   const [picker, setPicker] = useState<PickerState | null>(null)
@@ -173,11 +175,23 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
       d.sections.push(newSection(type, title))
     })
 
-  const copySection = (sourceId: string, title?: string) =>
+  const copySection = (sourceId: string, title?: string, afterSource = false) =>
     update(d => {
-      const src = d.sections.find(s => s.id === sourceId)
-      if (src) d.sections.push(cloneSection(src, title))
+      const index = d.sections.findIndex(s => s.id === sourceId)
+      if (index < 0) return
+      d.sections.splice(afterSource ? index + 1 : d.sections.length, 0, cloneSection(d.sections[index], title))
     })
+
+  const copyVerseChords = (targetId: string) => {
+    if (!canCopyVerseChords) return
+    update(d => {
+      const source = d.sections.find(s => s.type === 'verse')
+      const target = d.sections.find(s => s.id === targetId)
+      if (source && target?.type === 'verse' && source.id !== target.id) {
+        copySectionChords(source, target)
+      }
+    })
+  }
 
   const moveSection = (secIdx: number, dir: -1 | 1) =>
     update(d => {
@@ -491,6 +505,11 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
                 onMeta={patch => setSectionMeta(secIdx, patch)}
                 onMove={dir => moveSection(secIdx, dir)}
                 onDelete={() => deleteSection(secIdx)}
+                onCopy={() => copySection(section.id, undefined, true)}
+                onCopyChords={section.type === 'verse' && section.id !== firstVerse?.id
+                  ? () => copyVerseChords(section.id)
+                  : undefined}
+                canCopyChords={canCopyVerseChords}
               />
               <div className="pl-1 sm:pl-4">
                 {section.lines.map((line, lineIdx) => (
