@@ -8,7 +8,7 @@ import {
   type Auth,
   type User,
 } from 'firebase/auth'
-import { getFirestore, type Firestore } from 'firebase/firestore'
+import type { Firestore } from 'firebase/firestore'
 import { firebaseConfig } from '../firebase.config'
 
 const env = import.meta.env
@@ -26,17 +26,18 @@ export const firebaseEnabled = Boolean(config.apiKey && config.projectId && conf
 
 let app: FirebaseApp | null = null
 let auth: Auth | null = null
-let db: Firestore | null = null
+let dbPromise: Promise<Firestore> | null = null
 
 if (firebaseEnabled) {
   app = initializeApp(config)
   auth = getAuth(app)
-  db = getFirestore(app)
 }
 
-export function getDb(): Firestore {
-  if (!db) throw new Error('Firebase not configured')
-  return db
+export function getDb(): Promise<Firestore> {
+  const configured = app
+  if (!configured) throw new Error('Firebase not configured')
+  dbPromise ??= import('firebase/firestore').then(m => m.getFirestore(configured))
+  return dbPromise
 }
 
 export function getFirebaseAuth(): Auth {

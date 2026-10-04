@@ -39,11 +39,24 @@ describe('app smoke', () => {
       </SongProvider>,
     )
     fireEvent.click(within(container.querySelector('section')!).getByRole('button', { name: 'Copy section' }))
-    const sections = container.querySelectorAll('section')
+    let sections = container.querySelectorAll('section')
     expect(sections).toHaveLength(3)
+    const copiedTitle = () =>
+      (within(sections[1]).getByRole('textbox', { name: 'Section title' }) as HTMLInputElement).value
+    expect(copiedTitle()).toBe('Verse 2')
     expect(within(sections[1]).getByDisplayValue('Original lyrics')).toBeTruthy()
     expect(within(sections[1]).getByRole('button', { name: 'Chord G' })).toBeTruthy()
     expect((within(sections[2]).getByRole('textbox', { name: 'Section title' }) as HTMLInputElement).value).toBe('Chorus')
+    fireEvent.change(within(sections[0]).getByDisplayValue('Original lyrics'), {
+      target: { value: 'Edited lyrics' },
+    })
+    expect(within(sections[1]).getByDisplayValue('Original lyrics')).toBeTruthy()
+    fireEvent.click(within(sections[0]).getByRole('button', { name: 'Copy section' }))
+    sections = container.querySelectorAll('section')
+    expect(sections).toHaveLength(4)
+    expect((within(sections[1]).getByRole('textbox', { name: 'Section title' }) as HTMLInputElement).value).toBe('Verse 3')
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
     fireEvent.keyDown(window, { key: 'z', metaKey: true })
     expect(container.querySelectorAll('section')).toHaveLength(2)
   })
@@ -88,6 +101,49 @@ describe('app smoke', () => {
       </SongProvider>,
     )
     expect((screen.getByRole('button', { name: 'Copy chords from first verse' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('copies chords to the same word, not the same character position', () => {
+    const song = newSong()
+    song.sections[0].lines = [{ ...newLine('One tiny moon'), chords: [placedChord({ root: 'G', quality: 'maj' }, 9)] }]
+    const second = newSection('verse', 'Verse 2')
+    second.lines = [newLine('Some extraordinarily bright stars')]
+    song.sections.push(second)
+    const { container } = render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    const sections = container.querySelectorAll('section')
+    fireEvent.click(within(sections[1]).getByRole('button', { name: 'Copy chords from first verse' }))
+    const source = within(sections[0]).getByRole('button', { name: 'Chord G' })
+    const copied = within(sections[1]).getByRole('button', { name: 'Chord G' })
+    expect(copied).not.toBe(source)
+    expect(source.style.left).toBe(`${9 * 8}px`)
+    expect(copied.style.left).toBe(`${21 * 8}px`)
+  })
+
+  it('opens the PDF export options dialog', async () => {
+    const song = newSong()
+    render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }))
+    expect(await screen.findByRole('dialog', { name: 'PDF export options' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('lazy-loads the editor when a song is opened and returns to the library', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('No songs yet')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '+ New song' }))
+    expect(await screen.findByDisplayValue('Untitled Song')).toBeTruthy()
+    expect(screen.getByText('Transpose')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open song library' }))
+    expect(await screen.findByText('Untitled Song')).toBeTruthy()
   })
 
   it('validates song schema', () => {

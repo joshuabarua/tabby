@@ -59,7 +59,7 @@ export function SectionHeader({
             disabled={!canCopyChords}
             className="px-2 py-1 text-[11px] rounded border border-chord/40 text-chord enabled:hover:border-chord disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             title={canCopyChords
-              ? 'Replace chords on matching lines; keep lyrics and extra lines. Chords beyond the end of a lyric line are skipped.'
+              ? 'Copy chords onto the same word number of matching lines; keeps lyrics and extra lines. Chords on words the line does not have are skipped.'
               : 'Add chords to the first verse before copying them'}
           >
             Copy chords from first verse

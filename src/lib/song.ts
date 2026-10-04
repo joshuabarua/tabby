@@ -138,12 +138,67 @@ function cloneChords(chords: PlacedChord[]): PlacedChord[] {
   return chords.map(c => ({ ...c, id: uid(), chord: { ...c.chord } }))
 }
 
+type WordSpan = { start: number; end: number }
+
+function wordSpans(text: string): WordSpan[] {
+  const spans: WordSpan[] = []
+  for (const m of text.matchAll(/\S+/g)) {
+    spans.push({ start: m.index, end: m.index + m[0].length })
+  }
+  return spans
+}
+
+function wordIndexAt(spans: WordSpan[], position: number): number {
+  let lo = 0
+  let hi = spans.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (spans[mid].end > position) hi = mid
+    else lo = mid + 1
+  }
+  return lo
+}
+
+function mapPosition(
+  position: number,
+  sourceText: string,
+  sourceSpans: WordSpan[],
+  targetText: string,
+  targetSpans: WordSpan[],
+): number | undefined {
+  if (position > sourceText.length) return undefined
+  if (sourceSpans.length === 0) return position <= targetText.length ? position : undefined
+  const i = wordIndexAt(sourceSpans, position)
+  if (i === sourceSpans.length) return targetText.length
+  const target = targetSpans[i]
+  if (!target) return undefined
+  const source = sourceSpans[i]
+  if (position < source.start) return target.start
+  return target.start + Math.min(position - source.start, target.end - target.start - 1)
+}
+
 export function copySectionChords(source: Section, target: Section): void {
   target.lines.forEach((line, index) => {
     const sourceLine = source.lines[index]
-    if (sourceLine) {
-      line.chords = cloneChords(sourceLine.chords.filter(c => c.position <= line.text.length))
-    }
+    if (!sourceLine) return
+    const sourceSpans = wordSpans(sourceLine.text)
+    const targetSpans = wordSpans(line.text)
+    const used = new Set<number>()
+    const mapped: PlacedChord[] = []
+    cloneChords(sourceLine.chords).forEach((cloned, i) => {
+      const position = mapPosition(
+        sourceLine.chords[i].position,
+        sourceLine.text,
+        sourceSpans,
+        line.text,
+        targetSpans,
+      )
+      if (position === undefined || used.has(position)) return
+      used.add(position)
+      mapped.push({ ...cloned, position })
+    })
+    mapped.sort((a, b) => a.position - b.position)
+    line.chords = mapped
   })
 }
 

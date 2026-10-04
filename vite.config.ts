@@ -5,6 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/tabby/',
+  build: { manifest: true },
   plugins: [
     react(),
     tailwindcss(),

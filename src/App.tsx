@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import type { Song } from './types'
 import { SongProvider } from './state/SongContext'
-import { SongEditor } from './components/SongEditor'
 import { SongLibrary } from './components/SongLibrary'
 import { savePrefs } from './lib/storage'
+
+const SongEditor = lazy(() =>
+  import('./components/SongEditor').then(m => ({ default: m.SongEditor })),
+)
 
 export default function App() {
   const [openSong, setOpenSong] = useState<Song | null>(null)
@@ -24,7 +27,18 @@ export default function App() {
   return (
     <div className="h-full">
       <SongProvider key={openSong.id} initial={openSong}>
-        <SongEditor onOpenLibrary={() => setOpenSong(null)} />
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              className="h-full flex items-center justify-center text-sm text-faint"
+            >
+              Loading editor…
+            </div>
+          }
+        >
+          <SongEditor onOpenLibrary={() => setOpenSong(null)} />
+        </Suspense>
       </SongProvider>
     </div>
   )

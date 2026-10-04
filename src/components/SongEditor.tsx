@@ -13,7 +13,7 @@ import { SongPreview } from './SongPreview'
 import { PdfExportDialog } from './pdf/PdfExportDialog'
 import { SectionHeader } from './SectionHeader'
 import { AuthButton } from './AuthButton'
-import { suggestSections } from '../lib/structure'
+import { nextSectionTitle, suggestSections } from '../lib/structure'
 
 const SECTION_TYPES: { value: SectionType; label: string }[] = [
   { value: 'intro', label: 'Intro' },
@@ -179,7 +179,9 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
     update(d => {
       const index = d.sections.findIndex(s => s.id === sourceId)
       if (index < 0) return
-      d.sections.splice(afterSource ? index + 1 : d.sections.length, 0, cloneSection(d.sections[index], title))
+      const source = d.sections[index]
+      const next = title ?? nextSectionTitle(source.type, d.sections, source.title)
+      d.sections.splice(afterSource ? index + 1 : d.sections.length, 0, cloneSection(source, next))
     })
 
   const copyVerseChords = (targetId: string) => {

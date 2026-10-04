@@ -13,6 +13,26 @@ const LABELS: Record<SectionType, string> = {
 
 export type SectionSuggestion = { type: SectionType; title: string }
 
+const NUMBERED = /^(.*?)\s+(\d+)$/
+
+export function nextSectionTitle(type: SectionType, sections: Section[], title?: string): string {
+  const base = title?.trim() || LABELS[type]
+  const own = base.match(NUMBERED)
+  const stem = own ? own[1] : base
+  let highest = own ? parseInt(own[2], 10) : 0
+  let count = 0
+  for (const s of sections) {
+    const eff = s.title?.trim() || LABELS[s.type]
+    const m = eff.match(NUMBERED)
+    const sStem = m ? m[1] : eff
+    if (sStem.toLowerCase() !== stem.toLowerCase()) continue
+    count++
+    if (m) highest = Math.max(highest, parseInt(m[2], 10))
+  }
+  const top = Math.max(highest, count)
+  return `${stem} ${top === 0 ? 1 : top + 1}`
+}
+
 export function suggestSections(sections: Section[]): SectionSuggestion[] {
   const count = (t: SectionType) => sections.filter(s => s.type === t).length
   const last = sections.at(-1)?.type
@@ -61,6 +81,6 @@ export function suggestSections(sections: Section[]): SectionSuggestion[] {
 
   return picks.slice(0, 3).map(type => ({
     type,
-    title: type === 'verse' ? `Verse ${count('verse') + 1}` : LABELS[type],
+    title: type === 'verse' ? nextSectionTitle('verse', sections) : LABELS[type],
   }))
 }
