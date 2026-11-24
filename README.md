@@ -9,7 +9,11 @@ Firebase project with Google sign-in.
 
 ## Features
 
-- Lyrics editor with chords anchored to character positions (not spaces)
+- Lyrics editor with chords anchored to letters — they move with the word as you edit
+- Paste a plain-text chord chart (chords above lyrics, or inline ChordPro `[G]`)
+  to create a song
+- Keyboard chord editing: Tab to a chord, Enter for voicings, Delete to remove,
+  Alt+←/→ to nudge
 - Chord picker: roots, qualities, slash-bass, free-text search (`Gmaj7`, `D/F#`)
 - Chord diagrams — curated shapes plus an algorithmic voicing generator that
   produces correct fingerings for **any** tuning
@@ -17,7 +21,9 @@ Firebase project with Google sign-in.
 - Capo, transposition (±6), song sections, BPM/key/notes metadata
 - Undo/redo, keyboard shortcuts, responsive down to phone width
 - Local persistence via IndexedDB — no account needed
-- Optional Firebase sync (Google sign-in) for cross-device storage
+- Optional Firebase sync (Google sign-in): a shared library with live updates,
+  offline edits queued until you reconnect, and a prompt when someone else
+  changes the song you have open
 - JSON import/export, A4 PDF export with chord-diagram block
 - PWA: installs and works offline
 
@@ -61,11 +67,20 @@ Your songs, your project — Tabby never phones home to anyone else's backend.
    `you.github.io`); `localhost` is allowed by default.
 5. **Create Firestore**: Build → Firestore Database → production mode → pick a
    region. In the Rules tab, paste `firestore.rules` (ships with this repo) and
-   Publish — it restricts every user to `users/{their-uid}/songs/*`.
+   Publish.
+6. **Choose who can sign in.** The library is a single **shared** collection
+   (`songs/*`, plus a `meta/deletions` doc so deletes propagate). Everyone on
+   the email allowlist in `firestore.rules` sees and edits the same songs; edit
+   that list to your own address(es) before publishing. The rules also check
+   the shape and size of every song written.
 
-Restart `npm run dev`, click **Sign in to sync**, done. Sign-in merges local and
-cloud libraries (newest `updatedAt` wins); after that, every autosave writes to
-both. Signing out keeps everything on-device.
+Restart `npm run dev`, click **Sign in to sync**, done. Whenever you're signed
+in (including on page load), Tabby merges local and cloud libraries (newest
+`updatedAt` wins), then listens for live changes. Every autosave writes to both;
+edits made offline are queued by Firestore and sent when you reconnect. The
+editor header shows the state: *saved · synced / syncing… / offline / sync
+failed*. If someone else changes the song you have open, you're asked whether
+to load their version or keep yours. Signing out keeps everything on-device.
 
 > Firebase web API keys are safe to commit — access is enforced by the
 > Firestore rules, not the key.
@@ -74,7 +89,8 @@ both. Signing out keeps everything on-device.
 
 `vite.config.ts` sets `base: '/tabby/'` for GitHub Pages. Change it to `'/'` for
 a custom domain or root deploy. A ready-made Pages workflow lives in
-`.github/workflows/deploy.yml` — push to `main` and it builds and deploys.
+`.github/workflows/deploy.yml` — push to `main` and it runs the tests, builds
+and deploys.
 Remember to add your Pages domain to Firebase *Authorized domains*.
 
 ## Project layout
@@ -88,9 +104,12 @@ src/
     tunings.ts        built-in tuning library
     layout.ts         chord-line layout shared by preview + PDF
     storage.ts        IndexedDB + prefs
-    sync.ts           Firebase read/write + merge
-    firebase.ts       app init, Google auth helpers
-    song.ts           zod schema, import/export, factories
+    sync.ts           save/delete (local + cloud), sync status, live-sync lifecycle
+    cloudSync.ts      Firestore merge, writes and live listener (lazy-loaded)
+    remote.ts         rules for applying cloud changes / detecting conflicts
+    firebase.ts       app init, Google auth helpers, Firestore offline cache
+    song.ts           zod schema, import/export, factories, chord reflow on edit
+    chart.ts          plain-text / ChordPro chord chart parser
   state/              song context + undo history
   components/         editor, picker, popover, diagrams, library, preview, pdf
 ```

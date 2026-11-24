@@ -36,7 +36,20 @@ if (firebaseEnabled) {
 export function getDb(): Promise<Firestore> {
   const configured = app
   if (!configured) throw new Error('Firebase not configured')
-  dbPromise ??= import('firebase/firestore').then(m => m.getFirestore(configured))
+  dbPromise ??= import('firebase/firestore').then(m => {
+    // Persistent cache: writes made offline are queued in IndexedDB and sent
+    // when the connection returns, even across reloads. ignoreUndefinedProperties
+    // because songs routinely carry optional fields set to undefined (e.g. a
+    // chord's `bass`), which Firestore otherwise rejects.
+    try {
+      return m.initializeFirestore(configured, {
+        ignoreUndefinedProperties: true,
+        localCache: m.persistentLocalCache({ tabManager: m.persistentMultipleTabManager() }),
+      })
+    } catch {
+      return m.initializeFirestore(configured, { ignoreUndefinedProperties: true })
+    }
+  })
   return dbPromise
 }
 

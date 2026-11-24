@@ -1,8 +1,9 @@
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import type { Song } from './types'
 import { SongProvider } from './state/SongContext'
 import { SongLibrary } from './components/SongLibrary'
 import { savePrefs } from './lib/storage'
+import { startCloudSync } from './lib/sync'
 
 const SongEditor = lazy(() =>
   import('./components/SongEditor').then(m => ({ default: m.SongEditor })),
@@ -10,6 +11,8 @@ const SongEditor = lazy(() =>
 
 export default function App() {
   const [openSong, setOpenSong] = useState<Song | null>(null)
+
+  useEffect(() => startCloudSync(), [])
 
   const open = (song: Song) => {
     savePrefs({ lastSongId: song.id })

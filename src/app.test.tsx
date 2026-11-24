@@ -1,13 +1,21 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
+import { StrictMode } from 'react'
 import { afterEach, describe, it, expect } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import App from './App'
 import { SongProvider } from './state/SongContext'
 import { SongEditor } from './components/SongEditor'
 import { newLine, newSection, newSong, placedChord, validateSong } from './lib/song'
+import { getSong, putSong, resetDbConnection } from './lib/storage'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  // Editors save on unmount, so give each test an empty database.
+  resetDbConnection()
+  globalThis.indexedDB = new IDBFactory()
+})
 
 describe('app smoke', () => {
   it('library renders empty state', async () => {
@@ -223,5 +231,86 @@ describe('app smoke', () => {
       position: 99,
     })
     expect(validateSong(bad).error).toBeTruthy()
+  })
+
+  it('saves undo, so an undone edit stays undone after reload', async () => {
+    const song = newSong('Before')
+    await putSong(song)
+    render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    fireEvent.change(screen.getByDisplayValue('Before'), { target: { value: 'After' } })
+    await waitFor(async () => expect((await getSong(song.id))?.title).toBe('After'))
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    expect(screen.getByDisplayValue('Before')).toBeTruthy()
+    await waitFor(async () => expect((await getSong(song.id))?.title).toBe('Before'))
+  })
+
+  it('saves pending edits immediately when going back to the library', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: '+ New song' }))
+    const title = await screen.findByDisplayValue('Untitled Song')
+    fireEvent.change(title, { target: { value: 'Quick edit' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Open song library' }))
+    expect(await screen.findByText('Quick edit')).toBeTruthy()
+  })
+
+  it('records exactly one undo step per edit under StrictMode', () => {
+    const song = newSong('One')
+    render(
+      <StrictMode>
+        <SongProvider initial={song}>
+          <SongEditor onOpenLibrary={() => {}} />
+        </SongProvider>
+      </StrictMode>,
+    )
+    fireEvent.change(screen.getByDisplayValue('One'), { target: { value: 'Two' } })
+    fireEvent.click(screen.getByTitle('Undo (⌘Z)'))
+    expect(screen.getByDisplayValue('One')).toBeTruthy()
+    expect((screen.getByTitle('Undo (⌘Z)') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('moves chords with their word when lyrics are typed before them', () => {
+    const song = newSong()
+    song.sections[0].lines = [{ ...newLine('hello world'), chords: [placedChord({ root: 'G', quality: 'maj' }, 6)] }]
+    render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    const input = screen.getByDisplayValue('hello world') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'oh hello world' } })
+    expect(screen.getByRole('button', { name: 'Chord G' }).style.left).toBe(`${9 * 8}px`)
+  })
+
+  it('edits chords from the keyboard: Alt+arrow moves, Delete removes', () => {
+    const song = newSong()
+    song.sections[0].lines = [{ ...newLine('hello world'), chords: [placedChord({ root: 'G', quality: 'maj' }, 2)] }]
+    render(
+      <SongProvider initial={song}>
+        <SongEditor onOpenLibrary={() => {}} />
+      </SongProvider>,
+    )
+    const chord = screen.getByRole('button', { name: 'Chord G' })
+    expect(chord.tagName).toBe('BUTTON')
+    fireEvent.keyDown(chord, { key: 'ArrowRight', altKey: true })
+    expect(screen.getByRole('button', { name: 'Chord G' }).style.left).toBe(`${3 * 8}px`)
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Chord G' }), { key: 'Delete' })
+    expect(screen.queryByRole('button', { name: 'Chord G' })).toBeNull()
+  })
+
+  it('creates a song from a pasted chord chart', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Paste chart' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Chord chart text' }), {
+      target: { value: 'Title: Pasted\n[Chorus]\nG     D\nla la la la' },
+    })
+    expect(screen.getByText(/Pasted · 1 section · 1 lines · 2 chords/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Create song' }))
+    expect(await screen.findByDisplayValue('Pasted')).toBeTruthy()
+    expect(screen.getByDisplayValue('la la la la')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Chord D' }).style.left).toBe(`${6 * 8}px`)
   })
 })

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Chord, Section, SectionType } from '../types'
+import type { Chord, Section, SectionType, Song } from '../types'
 import { useSong } from '../state/SongContext'
 import { getTuning, BUILTIN_TUNINGS } from '../lib/tunings'
 import { chordDisplayName, transposeChord, transposeNote } from '../lib/music'
-import { newLine, newSection, placedChord, cloneSection, copySectionChords } from '../lib/song'
+import { newLine, newSection, placedChord, cloneSection, copySectionChords, reflowChords } from '../lib/song'
 import { detectKey } from '../lib/keydetect'
-import { saveSong } from '../lib/sync'
+import { onRemoteEvent } from '../lib/sync'
+import { isRemoteConflict } from '../lib/remote'
+import { SaveStatus } from './SaveStatus'
 import { LyricLineEditor } from './LyricLineEditor'
 import { ChordPicker } from './ChordPicker'
 import { ChordPopover } from './ChordPopover'
@@ -46,7 +48,25 @@ type PickerState = { secIdx: number; lineIdx: number; pos: number; replaceId?: s
 type PopState = { secIdx: number; lineIdx: number; placedId: string; x: number; y: number }
 
 export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
-  const { song, update, undo, redo, canUndo, canRedo, saved } = useSong()
+  const { song, update, replace, keepLocal, undo, redo, flush, canUndo, canRedo, saved } = useSong()
+  const songRef = useRef(song)
+  songRef.current = song
+  const [incoming, setIncoming] = useState<Song | null>(null)
+  const [deletedElsewhere, setDeletedElsewhere] = useState(false)
+
+  useEffect(
+    () =>
+      onRemoteEvent(e => {
+        if (e.type === 'pulled' && isRemoteConflict(songRef.current, e.song)) setIncoming(e.song)
+        if (e.type === 'removed' && e.id === songRef.current.id) setDeletedElsewhere(true)
+      }),
+    [],
+  )
+
+  const leave = async () => {
+    await flush()
+    onOpenLibrary()
+  }
   const tuning = getTuning(song.tuningId, song.customTunings)
   const detectedKey = useMemo(() => detectKey(song), [song])
   const firstByType = useMemo(() => {
@@ -111,14 +131,12 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
 
   // ---- mutations -----------------------------------------------------------
 
-  const setLineText = (secIdx: number, lineIdx: number, text: string) =>
+  const setLineText = (secIdx: number, lineIdx: number, text: string, caret?: number) =>
     update(
       d => {
-        d.sections[secIdx].lines[lineIdx].text = text
-        const len = text.length
-        d.sections[secIdx].lines[lineIdx].chords = d.sections[secIdx].lines[lineIdx].chords.filter(
-          c => c.position <= len,
-        )
+        const l = d.sections[secIdx].lines[lineIdx]
+        l.chords = reflowChords(l.text, text, l.chords, caret)
+        l.text = text
       },
       `line:${song.sections[secIdx].lines[lineIdx].id}`,
     )
@@ -243,6 +261,17 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
       l.chords = l.chords.filter(c => c.id !== placedId)
     })
 
+  const moveChord = (secIdx: number, lineIdx: number, placedId: string, delta: number) =>
+    update(d => {
+      const l = d.sections[secIdx].lines[lineIdx]
+      const c = l.chords.find(x => x.id === placedId)
+      if (!c) return
+      const next = Math.max(0, Math.min(l.text.length, c.position + delta))
+      if (next === c.position || l.chords.some(x => x.id !== placedId && x.position === next)) return
+      c.position = next
+      l.chords.sort((a, b) => a.position - b.position)
+    }, `move:${placedId}`)
+
   const setVoicing = (secIdx: number, lineIdx: number, placedId: string, voicingId: string) =>
     update(d => {
       const c = d.sections[secIdx].lines[lineIdx].chords.find(x => x.id === placedId)
@@ -289,7 +318,7 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
       }
       if (e.key === 's') {
         e.preventDefault()
-        void saveSong(song)
+        void flush()
       } else if (e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
@@ -307,7 +336,7 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [song, undo, redo])
+  }, [flush, undo, redo])
 
   const popPlaced = pop
     ? song.sections[pop.secIdx]?.lines[pop.lineIdx]?.chords.find(c => c.id === pop.placedId)
@@ -318,16 +347,14 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
       {/* top bar */}
       <header className="flex items-center gap-2 px-4 py-3 border-b border-line bg-surface/80 backdrop-blur sticky top-0 z-30">
         <button
-          onClick={onOpenLibrary}
+          onClick={() => void leave()}
           className="font-display text-lg leading-none hover:text-accent transition-colors"
           aria-label="Open song library"
         >
           Tabby
         </button>
         <span className="text-faint text-xs hidden sm:inline">/ {song.title}</span>
-        <span className={`text-[11px] ml-1 ${saved ? 'text-faint' : 'text-accent'}`}>
-          {saved ? 'saved' : 'saving…'}
-        </span>
+        <SaveStatus saved={saved} />
         <div className="flex-1" />
         <AuthButton />
         <button
@@ -347,7 +374,7 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           ↻
         </button>
         <button
-          onClick={() => void saveSong(song)}
+          onClick={() => void flush()}
           className="px-3 py-1.5 text-sm rounded-md border border-line hover:border-ink/40"
           title="Save (⌘S)"
         >
@@ -366,6 +393,58 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           Export PDF
         </button>
       </header>
+
+      {incoming && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-line bg-chord/10 text-sm"
+        >
+          <span className="flex-1 min-w-48">
+            This song was changed on another device or by someone you share it with.
+          </span>
+          <button
+            onClick={() => {
+              replace(incoming, { persisted: true })
+              setIncoming(null)
+            }}
+            className="px-3 py-1 rounded-md bg-ink text-paper hover:bg-ink/85"
+          >
+            Load their version
+          </button>
+          <button
+            onClick={() => {
+              keepLocal()
+              setIncoming(null)
+            }}
+            className="px-3 py-1 rounded-md border border-line hover:border-ink/40"
+          >
+            Keep mine
+          </button>
+        </div>
+      )}
+      {deletedElsewhere && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-line bg-accent/10 text-sm"
+        >
+          <span className="flex-1 min-w-48">This song was deleted on another device.</span>
+          <button
+            onClick={() => {
+              keepLocal()
+              setDeletedElsewhere(false)
+            }}
+            className="px-3 py-1 rounded-md border border-line hover:border-ink/40"
+          >
+            Keep it
+          </button>
+          <button
+            onClick={onOpenLibrary}
+            className="px-3 py-1 rounded-md border border-line hover:border-ink/40"
+          >
+            Back to library
+          </button>
+        </div>
+      )}
 
       {/* metadata */}
       <div className="border-b border-line bg-surface/60 px-4 py-3">
@@ -530,12 +609,14 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
                     key={line.id}
                     line={line}
                     armed={armed}
-                    onText={t => setLineText(secIdx, lineIdx, t)}
+                    onText={(t, caret) => setLineText(secIdx, lineIdx, t, caret)}
                     onSplit={at => splitLine(secIdx, lineIdx, at)}
                     onMergeUp={() => mergeUp(secIdx, lineIdx)}
                     onMoveFocus={(dir, col) => moveFocus(line.id, dir, col)}
                     onStripClick={pos => onStripClick(secIdx, lineIdx, pos)}
                     onChordClick={(pid, x, y) => onChordClick(secIdx, lineIdx, pid, x, y)}
+                    onChordDelete={pid => deleteChord(secIdx, lineIdx, pid)}
+                    onChordMove={(pid, delta) => moveChord(secIdx, lineIdx, pid, delta)}
                     onCaret={pos => {
                       lastCaret.current = { secIdx, lineIdx, pos }
                     }}
@@ -571,7 +652,8 @@ export function SongEditor({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           </div>
           <p className="text-[11px] text-faint pb-24 sm:pb-8">
             Click the space above a line to place a chord. Pick one from the palette below to place
-            several quickly — Esc to stop. ⌘K opens the picker, ⌘Z undoes.
+            several quickly — Esc to stop. ⌘K opens the picker at the cursor, ⌘Z undoes. Tab to a
+            chord to edit it from the keyboard: Enter for voicings, Delete to remove, Alt+←/→ to move.
           </p>
         </div>
       </main>

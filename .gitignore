@@ -5,3 +5,6 @@ dist-ssr
 .DS_Store
 dev-dist
 tsconfig.tsbuildinfo
+
+# Local agent/tool settings
+.devin/config.local.json

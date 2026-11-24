@@ -4,8 +4,12 @@ const DB_NAME = 'tabby'
 const STORE = 'songs'
 const VERSION = 1
 
+// One shared connection: opening is async, and a save started while the page
+// is being hidden or closed must reach IndexedDB before the page goes away.
+let dbPromise: Promise<IDBDatabase> | null = null
+
 function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  dbPromise ??= new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
@@ -13,9 +17,29 @@ function openDb(): Promise<IDBDatabase> {
         db.createObjectStore(STORE, { keyPath: 'id' })
       }
     }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    req.onsuccess = () => {
+      const db = req.result
+      const reset = () => {
+        db.close()
+        if (dbPromise === opened) dbPromise = null
+      }
+      db.onversionchange = reset
+      db.onclose = reset
+      resolve(db)
+    }
+    req.onerror = () => {
+      dbPromise = null
+      reject(req.error)
+    }
   })
+  const opened = dbPromise
+  return opened
+}
+
+/** Drop the cached connection (tests swap in a fresh IndexedDB). */
+export function resetDbConnection(): void {
+  void dbPromise?.then(db => db.close()).catch(() => {})
+  dbPromise = null
 }
 
 function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
@@ -24,9 +48,15 @@ function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequ
       new Promise<T>((resolve, reject) => {
         const t = db.transaction(STORE, mode)
         const req = run(t.objectStore(STORE))
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
-        t.oncomplete = () => db.close()
+        // Ask for an immediate commit so a save issued while the page is
+        // closing isn't left waiting on auto-commit.
+        if (mode === 'readwrite') t.commit?.()
+        // Resolve on commit, not on request success: a write isn't durable
+        // until the transaction completes, and callers (e.g. save-before-leave)
+        // rely on that.
+        t.oncomplete = () => resolve(req.result)
+        t.onerror = () => reject(t.error ?? req.error)
+        t.onabort = () => reject(t.error ?? new Error('IndexedDB transaction aborted'))
       }),
   )
 }

@@ -205,3 +205,64 @@ export function copySectionChords(source: Section, target: Section): void {
 export function placedChord(chord: PlacedChord['chord'], position: number): PlacedChord {
   return { id: uid(), chord, position }
 }
+
+/**
+ * Keep chords on the same letters when a lyric line is edited. Finds the edited
+ * span (common prefix/suffix), shifts chords after it, and pulls chords inside
+ * deleted text to the edit point. For a plain insertion or deletion inside
+ * repeated letters several alignments are equally valid; the caret after the
+ * edit picks the right one. Chords that would land on the same spot are
+ * dropped (first wins).
+ */
+export function reflowChords(
+  oldText: string,
+  newText: string,
+  chords: PlacedChord[],
+  caret?: number,
+): PlacedChord[] {
+  if (oldText === newText) return chords
+  const oldLen = oldText.length
+  const newLen = newText.length
+  const delta = newLen - oldLen
+  let prefix = 0
+  const minLen = Math.min(oldLen, newLen)
+  while (prefix < minLen && oldText[prefix] === newText[prefix]) prefix++
+  let suffix = 0
+  while (
+    suffix < minLen - prefix &&
+    oldText[oldLen - 1 - suffix] === newText[newLen - 1 - suffix]
+  ) {
+    suffix++
+  }
+
+  // Pure insert/delete: let a consistent caret choose among valid alignments.
+  if (caret !== undefined && prefix + suffix === minLen) {
+    const at = delta > 0 ? caret - delta : caret
+    const k = Math.abs(delta)
+    const consistent =
+      at >= 0 &&
+      at <= prefix &&
+      (delta > 0
+        ? oldText.slice(at) === newText.slice(at + k)
+        : oldText.slice(at + k) === newText.slice(at))
+    if (consistent) {
+      prefix = at
+      suffix = minLen - at
+    }
+  }
+  const oldEditEnd = oldLen - suffix
+
+  const used = new Set<number>()
+  const out: PlacedChord[] = []
+  for (const c of [...chords].sort((a, b) => a.position - b.position)) {
+    let position: number
+    if (c.position < prefix) position = c.position
+    else if (c.position >= oldEditEnd) position = c.position + delta
+    else position = prefix
+    position = Math.max(0, Math.min(position, newLen))
+    if (used.has(position)) continue
+    used.add(position)
+    out.push(c.position === position ? c : { ...c, position })
+  }
+  return out
+}

@@ -12,18 +12,22 @@ export function LyricLineEditor({
   onMoveFocus,
   onStripClick,
   onChordClick,
+  onChordDelete,
+  onChordMove,
   onCaret,
   registerInput,
 }: {
   line: LyricLine
   armed: Chord | null
   focused?: boolean
-  onText: (text: string) => void
+  onText: (text: string, caret?: number) => void
   onSplit: (at: number) => void
   onMergeUp: () => void
   onMoveFocus: (dir: -1 | 1, column: number) => void
   onStripClick: (position: number) => void
   onChordClick: (placedId: string, x: number, y: number) => void
+  onChordDelete: (placedId: string) => void
+  onChordMove: (placedId: string, delta: number) => void
   onCaret: (pos: number) => void
   registerInput: (id: string, el: HTMLInputElement | null) => void
 }) {
@@ -74,20 +78,33 @@ export function LyricLineEditor({
           </span>
         )}
         {line.chords.map(pc => (
-          <span
+          <button
+            type="button"
             key={pc.id}
-            className="chord-name absolute top-0"
+            data-chord-id={pc.id}
+            className="chord-name absolute top-0 p-0 bg-transparent border-0 leading-5 rounded-sm focus-visible:outline-2 focus-visible:outline-accent"
             style={{ left: pc.position * chWidth() }}
             onClick={e => {
               e.stopPropagation()
-              const r = (e.target as HTMLElement).getBoundingClientRect()
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
               onChordClick(pc.id, r.left + r.width / 2, r.bottom)
             }}
-            role="button"
+            onKeyDown={e => {
+              if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault()
+                onChordDelete(pc.id)
+              } else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                e.preventDefault()
+                const el = e.currentTarget
+                onChordMove(pc.id, e.key === 'ArrowLeft' ? -1 : 1)
+                requestAnimationFrame(() => el.isConnected && el.focus())
+              }
+            }}
             aria-label={`Chord ${chordDisplayName(pc.chord)}`}
+            title="Enter: voicings · Delete: remove · Alt+←/→: move"
           >
             {chordDisplayName(pc.chord)}
-          </span>
+          </button>
         ))}
       </div>
       {/* lyric input */}
@@ -98,7 +115,7 @@ export function LyricLineEditor({
         value={line.text}
         placeholder="· lyric line"
         autoFocus={focused}
-        onChange={e => onText(e.target.value)}
+        onChange={e => onText(e.target.value, e.target.selectionStart ?? undefined)}
         onSelect={e => onCaret((e.target as HTMLInputElement).selectionStart ?? 0)}
         onKeyDown={e => {
           const el = e.currentTarget

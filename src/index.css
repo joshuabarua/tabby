@@ -33,11 +33,14 @@ body {
   background: #b4532a33;
 }
 
-input,
-textarea,
-select,
-button {
-  font: inherit;
+/* In the base layer so utilities like font-mono can still override it. */
+@layer base {
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
 }
 
 :focus-visible {

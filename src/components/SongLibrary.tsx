@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Song } from '../types'
 import { listSongs, getSong } from '../lib/storage'
-import { saveSong, removeSong } from '../lib/sync'
+import { saveSong, removeSong, onLibraryChanged } from '../lib/sync'
+import { useSyncStatus } from './SaveStatus'
+import { PasteChartDialog } from './PasteChartDialog'
 import { AuthButton } from './AuthButton'
 import { newSong, validateSong, exportSongJson } from '../lib/song'
 import { uid } from '../lib/id'
@@ -13,8 +15,12 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const syncStatus = useSyncStatus()
+
   const refresh = () => void listSongs().then(setSongs)
   useEffect(refresh, [])
+  useEffect(() => onLibraryChanged(refresh), [])
 
   const create = async () => {
     const song = newSong()
@@ -76,7 +82,14 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[11px] uppercase tracking-[0.25em] text-faint">My songs</h2>
           <div className="flex items-center gap-2">
-            <AuthButton onSynced={refresh} />
+            <AuthButton />
+            <button
+              onClick={() => setPasteOpen(true)}
+              className="text-sm px-3 py-1.5 rounded-md border border-line hover:border-ink/40"
+              title="Create a song from a plain-text chord chart"
+            >
+              Paste chart
+            </button>
             <button
               onClick={() => fileRef.current?.click()}
               className="text-sm px-3 py-1.5 rounded-md border border-line hover:border-ink/40"
@@ -108,7 +121,7 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
         {songs.length === 0 ? (
           <div className="border border-dashed border-line rounded-xl py-14 text-center text-faint">
             <p className="font-display text-2xl text-ink-soft mb-1">No songs yet</p>
-            <p className="text-sm">Write your first song sheet — it stays on this device.</p>
+            <p className="text-sm">Write your first song sheet, or paste a chord chart you already have.</p>
           </div>
         ) : (
           <ul className="divide-y divide-line border-y border-line">
@@ -178,9 +191,22 @@ export function SongLibrary({ onOpen }: { onOpen: (song: Song) => void }) {
         )}
 
         <p className="text-xs text-faint mt-6">
-          Songs are stored locally in your browser. Export JSON to back up or move between devices.
+          {syncStatus === 'local'
+            ? 'Songs are stored locally in your browser. Export JSON to back up or move between devices.'
+            : 'Songs are saved on this device and synced to the shared cloud library.'}
         </p>
       </div>
+      {/* Outside the animated container: its transform would trap position:fixed. */}
+      {pasteOpen && (
+        <PasteChartDialog
+          onClose={() => setPasteOpen(false)}
+          onCreate={async song => {
+            await saveSong(song)
+            setPasteOpen(false)
+            onOpen(song)
+          }}
+        />
+      )}
     </div>
   )
 }

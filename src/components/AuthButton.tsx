@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
 import { firebaseEnabled, onUserChanged, signInWithGoogle, signOutUser } from '../lib/firebase'
-import { syncAll } from '../lib/sync'
 
-export function AuthButton({ onSynced }: { onSynced?: () => void }) {
+export function AuthButton() {
   const [user, setUser] = useState<User | null>(null)
   const [busy, setBusy] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
@@ -15,11 +14,9 @@ export function AuthButton({ onSynced }: { onSynced?: () => void }) {
   const signIn = async () => {
     setBusy(true)
     try {
+      // The library merge runs from startCloudSync once auth state changes.
       await signInWithGoogle()
-      const { pulled, pushed, removed } = await syncAll()
-      setSyncMsg(`synced ↓${pulled} ↑${pushed}${removed ? ` ×${removed}` : ''}`)
-      setTimeout(() => setSyncMsg(null), 4000)
-      onSynced?.()
+      setSyncMsg(null)
     } catch (e) {
       setSyncMsg('sign-in failed')
       console.warn(e)

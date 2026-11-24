@@ -1,18 +1,48 @@
 rules_version = '2';
 service cloud.firestore {
+  // Only these Google accounts can read or write the shared library.
   function allowed() {
     return request.auth != null
+      && request.auth.token.email_verified == true
       && request.auth.token.email in [
         "joshua.k.barua@gmail.com",
         "tjhath@gmail.com"
       ];
   }
+
+  // Shape and size checks so a bad client can't write junk or huge documents.
+  function validSong(songId) {
+    let d = request.resource.data;
+    return d.keys().hasAll(['id', 'title', 'tuningId', 'capo', 'sections',
+                            'customVoicings', 'customTunings', 'createdAt', 'updatedAt'])
+      && d.keys().hasOnly(['id', 'title', 'artist', 'key', 'bpm', 'tuningId', 'capo',
+                           'sections', 'customVoicings', 'customTunings', 'notes',
+                           'createdAt', 'updatedAt'])
+      && d.id == songId
+      && d.title is string && d.title.size() > 0 && d.title.size() <= 300
+      && (!('artist' in d) || (d.artist is string && d.artist.size() <= 300))
+      && (!('key' in d) || (d.key is string && d.key.size() <= 20))
+      && (!('bpm' in d) || d.bpm is number)
+      && (!('notes' in d) || (d.notes is string && d.notes.size() <= 20000))
+      && d.tuningId is string
+      && d.capo is int && d.capo >= 0 && d.capo <= 12
+      && d.sections is list && d.sections.size() <= 200
+      && d.customVoicings is list && d.customVoicings.size() <= 500
+      && d.customTunings is list && d.customTunings.size() <= 50
+      && d.createdAt is string && d.updatedAt is string;
+  }
+
   match /databases/{database}/documents {
     match /songs/{songId} {
-      allow read, write: if allowed();
+      allow read, delete: if allowed();
+      allow create, update: if allowed() && validSong(songId);
     }
-    match /meta/{docId} {
-      allow read, write: if allowed();
+    // Tombstones so deletions propagate: { songs: { [songId]: isoDate | null } }
+    match /meta/deletions {
+      allow read: if allowed();
+      allow write: if allowed()
+        && request.resource.data.keys().hasOnly(['songs'])
+        && request.resource.data.songs is map;
     }
   }
 }

@@ -4,12 +4,14 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   setDoc,
   type Firestore,
 } from 'firebase/firestore'
 import type { Song } from '../types'
 import { getDb } from './firebase'
-import { deleteSong, listSongs, putSong } from './storage'
+import { deleteSong, getSong, listSongs, putSong } from './storage'
+import { planRemoteChange } from './remote'
 
 function songsRef(db: Firestore) {
   return collection(db, 'songs')
@@ -86,4 +88,44 @@ export async function syncCloudSongs(): Promise<{ pulled: number; pushed: number
     }
   }
   return { pulled, pushed, removed }
+}
+
+export type RemoteEvent = { type: 'pulled'; song: Song } | { type: 'removed'; id: string }
+
+/**
+ * Live updates: songs changed or deleted elsewhere (another device, or the
+ * other person sharing the library) are written to IndexedDB as they arrive.
+ * Our own not-yet-acknowledged writes are skipped.
+ */
+export async function subscribeCloudSongs(
+  onEvent: (e: RemoteEvent) => void,
+  onError: (e: Error) => void,
+): Promise<() => void> {
+  const db = await getDb()
+  return onSnapshot(
+    songsRef(db),
+    snap => {
+      void (async () => {
+        for (const change of snap.docChanges()) {
+          if (change.doc.metadata.hasPendingWrites) continue
+          if (change.type === 'removed') {
+            if (snap.metadata.fromCache) continue
+            const local = await getSong(change.doc.id)
+            if (local) {
+              await deleteSong(change.doc.id)
+              onEvent({ type: 'removed', id: change.doc.id })
+            }
+            continue
+          }
+          const remote = change.doc.data() as Song
+          const local = await getSong(remote.id)
+          if (planRemoteChange(local, remote) === 'pull') {
+            await putSong(remote)
+            onEvent({ type: 'pulled', song: remote })
+          }
+        }
+      })().catch(onError)
+    },
+    onError,
+  )
 }

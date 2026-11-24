@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Section } from '../types'
-import { cloneSection, copySectionChords, newLine, newSection, placedChord } from './song'
+import { cloneSection, copySectionChords, newLine, newSection, placedChord, reflowChords } from './song'
 
 function sourceVerse() {
   const section = newSection('verse', 'Verse 1')
@@ -172,5 +172,59 @@ describe('word-aligned chord copying', () => {
     copySectionChords(source, target)
     expect(positions(target)).toEqual([0])
     expect(target.lines[0].chords[0].chord.root).toBe('G')
+  })
+})
+
+describe('reflowChords', () => {
+  const at = (...positions: number[]) =>
+    positions.map(p => placedChord({ root: 'G', quality: 'maj' }, p))
+  const pos = (cs: { position: number }[]) => cs.map(c => c.position)
+
+  it('shifts chords right when text is inserted before them', () => {
+    // "hello world" → "oh hello world", chords on h(0) and w(6)
+    expect(pos(reflowChords('hello world', 'oh hello world', at(0, 6), 3))).toEqual([3, 9])
+  })
+
+  it('leaves chords before the edit alone', () => {
+    expect(pos(reflowChords('hello world', 'hello big world', at(0, 6), 10))).toEqual([0, 10])
+  })
+
+  it('shifts chords left when text before them is deleted', () => {
+    expect(pos(reflowChords('hello big world', 'hello world', at(0, 10), 6))).toEqual([0, 6])
+  })
+
+  it('pulls chords inside deleted text to the edit point instead of dropping them', () => {
+    expect(pos(reflowChords('hello big world', 'hello world', at(7), 6))).toEqual([6])
+  })
+
+  it('keeps the chord at the end of a line when the line is extended', () => {
+    expect(pos(reflowChords('hi', 'hi there', at(2), 8))).toEqual([8])
+  })
+
+  it('drops chords that collapse onto the same spot', () => {
+    expect(pos(reflowChords('abcdef', 'af', at(1, 3), 1))).toEqual([1])
+  })
+
+  it('uses the caret to resolve repeated letters', () => {
+    // typing "l" after the existing "l" in "hel|lo": chord on "o" (4) moves to 5
+    expect(pos(reflowChords('hello', 'helllo', at(4), 4))).toEqual([5])
+  })
+
+  it('returns chords unchanged when the text is unchanged', () => {
+    const cs = at(1)
+    expect(reflowChords('abc', 'abc', cs)).toBe(cs)
+  })
+})
+
+describe('reflowChords caret handling', () => {
+  const g = (p: number) => [placedChord({ root: 'G', quality: 'maj' }, p)]
+  it('ignores a caret that does not fit the edit', () => {
+    expect(reflowChords('hello world', 'oh hello world', g(6), 14)[0].position).toBe(9)
+  })
+  it('uses the caret when typing inside a doubled letter', () => {
+    // "ab|b" → typing "b" between the b's: a chord on the second b (2) moves to 3
+    expect(reflowChords('abb', 'abbb', g(2), 2)[0].position).toBe(3)
+    // typing "b" at the very end leaves it on the second b
+    expect(reflowChords('abb', 'abbb', g(2), 4)[0].position).toBe(2)
   })
 })

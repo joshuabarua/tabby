@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { removeSong, saveSong, syncAll } from './sync'
+import { getSyncStatus, removeSong, saveSong, syncAll } from './sync'
 import { deleteSong, putSong } from './storage'
 import { removeCloudSong, saveCloudSong, syncCloudSongs } from './cloudSync'
 import { newSong } from './song'
@@ -14,6 +14,7 @@ vi.mock('./firebase', () => ({
     return firebaseMock.enabled
   },
   currentUser: () => firebaseMock.user,
+  onUserChanged: () => () => {},
 }))
 
 vi.mock('./storage', () => ({
@@ -56,8 +57,29 @@ describe('saveSong', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await expect(saveSong(newSong())).resolves.toBeUndefined()
     expect(putSong).toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledWith('cloud save failed', expect.any(Error))
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('cloud save failed', expect.any(Error)))
+    await vi.waitFor(() => expect(getSyncStatus()).toBe('error'))
     warn.mockRestore()
+  })
+
+  it('reports pending while the cloud write is in flight, then synced', async () => {
+    firebaseMock.user = { uid: 'u1' }
+    let resolve!: () => void
+    vi.mocked(saveCloudSong).mockImplementationOnce(() => new Promise<void>(r => (resolve = r)))
+    await saveSong(newSong())
+    expect(getSyncStatus()).toBe('pending')
+    resolve()
+    await vi.waitFor(() => expect(getSyncStatus()).toBe('synced'))
+  })
+
+  it('does not wait for the cloud before resolving (offline writes queue)', async () => {
+    firebaseMock.user = { uid: 'u1' }
+    vi.mocked(saveCloudSong).mockImplementationOnce(() => new Promise<void>(() => {}))
+    await expect(saveSong(newSong())).resolves.toBeUndefined()
+  })
+
+  it('reports local when signed out', () => {
+    expect(getSyncStatus()).toBe('local')
   })
 })
 
@@ -81,7 +103,7 @@ describe('removeSong', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await expect(removeSong('s1')).resolves.toBeUndefined()
     expect(deleteSong).toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledWith('cloud delete failed', expect.any(Error))
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('cloud delete failed', expect.any(Error)))
     warn.mockRestore()
   })
 })
